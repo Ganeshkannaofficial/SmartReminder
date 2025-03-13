@@ -23,7 +23,9 @@ export default function SmartAlarm() {
 
   const tasks = [
     { type: "math", question: "What is 5 + 3?", answer: "8", difficulty: 1 },
-    { type: "logic", question: "Which number comes next: 2, 4, 8, 16, __?", answer: "32", difficulty: 2 }
+    { type: "logic", question: "Which number comes next: 2, 4, 8, 16, __?", answer: "32", difficulty: 2 },
+    { type: "math", question: "Solve: 12 * 4", answer: "48", difficulty: 3 },
+    { type: "logic", question: "What is the missing letter: A, C, E, G, __?", answer: "I", difficulty: 4 }
   ];
 
   useEffect(() => {
@@ -63,17 +65,30 @@ export default function SmartAlarm() {
   };
 
   const handleSnooze = () => {
-    setSnoozeCount(snoozeCount + 1);
-    setIsSnoozing(true);
-    setIsStopTask(false);
-    stopAlarm();
+    setShowPuzzle(true);
+    setSelectedTask(tasks[snoozeCount % tasks.length]);
+  };
 
-    setTimeout(() => {
-      setIsSnoozing(false);
-      if (activeAlarmIndex !== null) {
-        ringAlarm(activeAlarmIndex);
+  const solveTask = (answer) => {
+    if (answer === selectedTask?.answer) {
+      setShowPuzzle(false);
+      if (isStopTask) {
+        stopAlarm();
+        removeAlarm(activeAlarmIndex);
+        setIsStopTask(false);
+      } else {
+        setSnoozeCount(snoozeCount + 1);
+        setIsSnoozing(true);
+        stopAlarm();
+
+        setTimeout(() => {
+          setIsSnoozing(false);
+          if (activeAlarmIndex !== null) {
+            ringAlarm(activeAlarmIndex);
+          }
+        }, 5000);
       }
-    }, 5000);
+    }
   };
 
   const handleStopAlarm = () => {
@@ -81,18 +96,6 @@ export default function SmartAlarm() {
     setIsSnoozing(false);
     setIsStopTask(true);
     setSelectedTask(tasks[Math.floor(Math.random() * tasks.length)]);
-  };
-
-  const solveTask = (answer) => {
-    if (answer === selectedTask?.answer) {
-      setShowPuzzle(false);
-      setWakeUpSuccess(wakeUpSuccess + 1);
-      stopAlarm();
-
-      if (isStopTask) {
-        removeAlarm(activeAlarmIndex); // Completely remove the alarm on correct stop answer
-      }
-    }
   };
 
   const stopAlarm = () => {
@@ -133,7 +136,7 @@ export default function SmartAlarm() {
 
       {showPuzzle && selectedTask && (
         <div className="puzzle-box">
-          <h2>Complete this task to dismiss</h2>
+          <h2>Complete this task to continue</h2>
           <p>{selectedTask.question}</p>
           <input type="text" placeholder="Enter answer" onChange={(e) => solveTask(e.target.value)} />
         </div>
