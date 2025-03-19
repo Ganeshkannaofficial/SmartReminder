@@ -6,7 +6,7 @@ export default function SmartAlarm() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showPuzzle, setShowPuzzle] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [activeAlarm, setActiveAlarm] = useState(null); // Track the current active alarm
+  const [activeAlarm, setActiveAlarm] = useState(null);
   const [snoozeCount, setSnoozeCount] = useState(0);
   const [wakeUpSuccess, setWakeUpSuccess] = useState(0);
   const [isSnoozing, setIsSnoozing] = useState(false);
@@ -62,7 +62,6 @@ export default function SmartAlarm() {
   };
 
   const ringAlarm = (index) => {
-    // Stop all sounds first
     if (activeAlarm?.ringtone) {
       activeAlarm.ringtone.pause();
       activeAlarm.ringtone.currentTime = 0;
@@ -70,18 +69,15 @@ export default function SmartAlarm() {
 
     const ringingAlarm = alarms[index];
 
-    // Play sound
     if (ringingAlarm?.ringtone) {
       ringingAlarm.ringtone.volume = Math.min(1, 0.5 + snoozeCount * 0.2);
       ringingAlarm.ringtone.loop = true;
       ringingAlarm.ringtone.play().catch((err) => console.log("Autoplay blocked:", err));
     }
 
-    // Remove ringing alarm from alarms list
     const updatedAlarms = alarms.filter((_, i) => i !== index);
     setAlarms(updatedAlarms);
 
-    // Set active alarm
     setActiveAlarm({ ...ringingAlarm, ringing: true });
   };
 
@@ -108,7 +104,6 @@ export default function SmartAlarm() {
 
         setTimeout(() => {
           setIsSnoozing(false);
-          // Re-ring the active alarm
           if (activeAlarm) {
             activeAlarm.ringtone.play().catch((err) => console.log("Autoplay blocked:", err));
           }
@@ -129,10 +124,19 @@ export default function SmartAlarm() {
       activeAlarm.ringtone.pause();
       activeAlarm.ringtone.currentTime = 0;
     }
-
-    // Clear active alarm
     setActiveAlarm(null);
     setWakeUpSuccess(wakeUpSuccess + 1);
+  };
+
+  // **New: Stop specific alarm in the list**
+  const stopSpecificAlarm = (index) => {
+    const alarmToStop = alarms[index];
+    if (alarmToStop?.ringtone) {
+      alarmToStop.ringtone.pause();
+      alarmToStop.ringtone.currentTime = 0;
+    }
+    const updatedAlarms = alarms.filter((_, i) => i !== index);
+    setAlarms(updatedAlarms);
   };
 
   return (
@@ -152,11 +156,8 @@ export default function SmartAlarm() {
         {alarms.map((alarm, index) => (
           <div key={index} className="alarm-item">
             <span>{alarm.time}</span>
-            {alarm.ringtone && (
-              <audio controls src={alarm.ringtone.src}>
-                Your browser does not support the audio element.
-              </audio>
-            )}
+            <span>⏰ Alarm Set</span>
+            <button onClick={() => stopSpecificAlarm(index)}>Stop</button>
           </div>
         ))}
       </div>
