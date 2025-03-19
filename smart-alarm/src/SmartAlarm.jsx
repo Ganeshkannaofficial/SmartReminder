@@ -4,22 +4,15 @@ import "./SmartAlarm.css";
 export default function SmartAlarm() {
   const [alarms, setAlarms] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [alarmSound, setAlarmSound] = useState(new Audio("/alarm.mp3"));
   const [showPuzzle, setShowPuzzle] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [activeAlarmIndex, setActiveAlarmIndex] = useState(null);
+  const [activeAlarm, setActiveAlarm] = useState(null); // Track the current active alarm
   const [snoozeCount, setSnoozeCount] = useState(0);
   const [wakeUpSuccess, setWakeUpSuccess] = useState(0);
   const [isSnoozing, setIsSnoozing] = useState(false);
   const [isStopTask, setIsStopTask] = useState(false);
-
-  const handleCustomRingtone = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const newSound = new Audio(URL.createObjectURL(file));
-      setAlarmSound(newSound);
-    }
-  };
+  const [alarmTime, setAlarmTime] = useState("");
+  const [customRingtone, setCustomRingtone] = useState(null);
 
   const tasks = [
     { type: "math", question: "What is 5 + 3?", answer: "8", difficulty: 1 },
@@ -43,25 +36,53 @@ export default function SmartAlarm() {
     });
   }, [currentTime, alarms, isSnoozing]);
 
-  const addAlarm = (time) => {
-    if (time) {
-      setAlarms([...alarms, { time, ringing: false }]);
+  const handleCustomRingtone = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const newSound = new Audio(URL.createObjectURL(file));
+      setCustomRingtone(newSound);
     }
   };
 
-  const removeAlarm = (index) => {
-    setAlarms(alarms.filter((_, i) => i !== index));
+  const setAlarm = () => {
+    if (alarmTime && customRingtone) {
+      const ringtoneClone = new Audio(customRingtone.src);
+
+      if (alarms.find((alarm) => alarm.time === alarmTime)) {
+        alert("An alarm is already set for this time.");
+        return;
+      }
+
+      setAlarms([...alarms, { time: alarmTime, ringing: false, ringtone: ringtoneClone }]);
+      setAlarmTime("");
+      setCustomRingtone(null);
+    } else {
+      alert("Please select both time and a ringtone before setting the alarm!");
+    }
   };
 
   const ringAlarm = (index) => {
-    setActiveAlarmIndex(index);
-    alarmSound.volume = Math.min(1, 0.5 + snoozeCount * 0.2);
-    alarmSound.loop = true;
-    alarmSound.play().catch((err) => console.log("Autoplay blocked:", err));
+    // Stop all sounds first
+    if (activeAlarm?.ringtone) {
+      activeAlarm.ringtone.pause();
+      activeAlarm.ringtone.currentTime = 0;
+    }
 
-    setAlarms((prevAlarms) =>
-      prevAlarms.map((alarm, i) => (i === index ? { ...alarm, ringing: true } : alarm))
-    );
+    const ringingAlarm = alarms[index];
+
+    // Play sound
+    if (ringingAlarm?.ringtone) {
+      ringingAlarm.ringtone.volume = Math.min(1, 0.5 + snoozeCount * 0.2);
+      ringingAlarm.ringtone.loop = true;
+      ringingAlarm.ringtone.play().catch((err) => console.log("Autoplay blocked:", err));
+    }
+
+    // Remove ringing alarm from alarms list
+    const updatedAlarms = alarms.filter((_, i) => i !== index);
+    setAlarms(updatedAlarms);
+
+    // Set active alarm
+    setActiveAlarm({ ...ringingAlarm, ringing: true });
   };
 
   const handleSnooze = () => {
@@ -72,19 +93,24 @@ export default function SmartAlarm() {
   const solveTask = (answer) => {
     if (answer === selectedTask?.answer) {
       setShowPuzzle(false);
+
+      if (activeAlarm?.ringtone) {
+        activeAlarm.ringtone.pause();
+        activeAlarm.ringtone.currentTime = 0;
+      }
+
       if (isStopTask) {
         stopAlarm();
-        removeAlarm(activeAlarmIndex);
         setIsStopTask(false);
       } else {
         setSnoozeCount(snoozeCount + 1);
         setIsSnoozing(true);
-        stopAlarm();
 
         setTimeout(() => {
           setIsSnoozing(false);
-          if (activeAlarmIndex !== null) {
-            ringAlarm(activeAlarmIndex);
+          // Re-ring the active alarm
+          if (activeAlarm) {
+            activeAlarm.ringtone.play().catch((err) => console.log("Autoplay blocked:", err));
           }
         }, 5000);
       }
@@ -99,12 +125,14 @@ export default function SmartAlarm() {
   };
 
   const stopAlarm = () => {
-    alarmSound.pause();
-    alarmSound.currentTime = 0;
-    setActiveAlarmIndex(null);
-    setAlarms((prevAlarms) =>
-      prevAlarms.map((alarm, i) => (i === activeAlarmIndex ? { ...alarm, ringing: false } : alarm))
-    );
+    if (activeAlarm?.ringtone) {
+      activeAlarm.ringtone.pause();
+      activeAlarm.ringtone.currentTime = 0;
+    }
+
+    // Clear active alarm
+    setActiveAlarm(null);
+    setWakeUpSuccess(wakeUpSuccess + 1);
   };
 
   return (
@@ -112,8 +140,11 @@ export default function SmartAlarm() {
       <h1>Smart Alarm</h1>
       <div className="alarm-box">
         <p>Current Time: {currentTime.toLocaleTimeString()}</p>
-        <input type="time" onChange={(e) => addAlarm(e.target.value)} />
+        <input type="time" value={alarmTime} onChange={(e) => setAlarmTime(e.target.value)} />
         <input type="file" accept="audio/*" onChange={handleCustomRingtone} />
+        <button onClick={setAlarm} disabled={!alarmTime || !customRingtone}>
+          Set Alarm
+        </button>
       </div>
 
       <div className="alarms-list">
@@ -121,14 +152,18 @@ export default function SmartAlarm() {
         {alarms.map((alarm, index) => (
           <div key={index} className="alarm-item">
             <span>{alarm.time}</span>
-            <button onClick={() => removeAlarm(index)}>❌</button>
+            {alarm.ringtone && (
+              <audio controls src={alarm.ringtone.src}>
+                Your browser does not support the audio element.
+              </audio>
+            )}
           </div>
         ))}
       </div>
 
-      {activeAlarmIndex !== null && alarms[activeAlarmIndex]?.ringing && !showPuzzle && !isSnoozing && (
+      {activeAlarm && !showPuzzle && !isSnoozing && (
         <div className="alarm-active">
-          <p>ALARM RINGING!</p>
+          <p>ALARM RINGING! ({activeAlarm.time})</p>
           <button onClick={handleSnooze}>Snooze</button>
           <button onClick={handleStopAlarm}>Stop</button>
         </div>
