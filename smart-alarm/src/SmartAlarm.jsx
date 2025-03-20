@@ -1,25 +1,17 @@
 import { useState, useEffect } from "react";
+import GameModal from "./GameModal";
 import "./SmartAlarm.css";
 
 export default function SmartAlarm() {
   const [alarms, setAlarms] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [showPuzzle, setShowPuzzle] = useState(false);
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [activeAlarm, setActiveAlarm] = useState(null);
+  const [activeAlarmIndex, setActiveAlarmIndex] = useState(null);
   const [snoozeCount, setSnoozeCount] = useState(0);
   const [wakeUpSuccess, setWakeUpSuccess] = useState(0);
-  const [isSnoozing, setIsSnoozing] = useState(false);
-  const [isStopTask, setIsStopTask] = useState(false);
   const [alarmTime, setAlarmTime] = useState("");
   const [customRingtone, setCustomRingtone] = useState(null);
-
-  const tasks = [
-    { type: "math", question: "What is 5 + 3?", answer: "8", difficulty: 1 },
-    { type: "logic", question: "Which number comes next: 2, 4, 8, 16, __?", answer: "32", difficulty: 2 },
-    { type: "math", question: "Solve: 12 * 4", answer: "48", difficulty: 3 },
-    { type: "logic", question: "What is the missing letter: A, C, E, G, __?", answer: "I", difficulty: 4 }
-  ];
+  const [showGamePanel, setShowGamePanel] = useState(false);
+  const [gameMode, setGameMode] = useState(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -28,13 +20,17 @@ export default function SmartAlarm() {
 
   useEffect(() => {
     const currentFormattedTime = currentTime.toLocaleTimeString("en-US", { hour12: false }).slice(0, 5);
-
     alarms.forEach((alarm, index) => {
-      if (alarm.time === currentFormattedTime && !alarm.ringing && !isSnoozing) {
+      if (
+        alarm.time === currentFormattedTime &&
+        !alarm.ringing &&
+        !alarm.stopped &&  // NEW: Prevent re-triggering stopped alarms
+        (!alarm.snoozedUntil || currentTime >= alarm.snoozedUntil)
+      ) {
         ringAlarm(index);
       }
     });
-  }, [currentTime, alarms, isSnoozing]);
+  }, [currentTime, alarms]);
 
   const handleCustomRingtone = (e) => {
     const file = e.target.files[0];
@@ -46,14 +42,12 @@ export default function SmartAlarm() {
 
   const setAlarm = () => {
     if (alarmTime && customRingtone) {
-      const ringtoneClone = new Audio(customRingtone.src);
-
       if (alarms.find((alarm) => alarm.time === alarmTime)) {
         alert("An alarm is already set for this time.");
         return;
       }
-
-      setAlarms([...alarms, { time: alarmTime, ringing: false, ringtone: ringtoneClone }]);
+      const ringtoneClone = new Audio(customRingtone.src);
+      setAlarms([...alarms, { time: alarmTime, ringing: false, ringtone: ringtoneClone, snoozedUntil: null, stopped: false }]);
       setAlarmTime("");
       setCustomRingtone(null);
     } else {
@@ -62,81 +56,105 @@ export default function SmartAlarm() {
   };
 
   const ringAlarm = (index) => {
-    if (activeAlarm?.ringtone) {
-      activeAlarm.ringtone.pause();
-      activeAlarm.ringtone.currentTime = 0;
-    }
+    let updatedAlarms = [...alarms];
 
-    const ringingAlarm = alarms[index];
+    // Stop other ringing alarms
+    updatedAlarms = updatedAlarms.map((alarm, i) => {
+      if (i !== index && alarm.ringing) {
+        if (alarm?.ringtone) {
+          alarm.ringtone.pause();
+          alarm.ringtone.currentTime = 0;
+        }
+        return { ...alarm, ringing: false, snoozedUntil: null };
+      }
+      return alarm;
+    });
 
-    if (ringingAlarm?.ringtone) {
-      ringingAlarm.ringtone.volume = Math.min(1, 0.5 + snoozeCount * 0.2);
-      ringingAlarm.ringtone.loop = true;
-      ringingAlarm.ringtone.play().catch((err) => console.log("Autoplay blocked:", err));
-    }
+    // Play current alarm
+    const alarmToRing = updatedAlarms[index];
+    const ringtoneClone = new Audio(alarmToRing.ringtone.src);
+    ringtoneClone.volume = Math.min(1, 0.5 + snoozeCount * 0.2);
+    ringtoneClone.loop = true;
+    ringtoneClone.play().catch((err) => console.log("Autoplay blocked:", err));
 
-    const updatedAlarms = alarms.filter((_, i) => i !== index);
+    updatedAlarms[index] = {
+      ...alarmToRing,
+      ringtone: ringtoneClone,
+      ringing: true,
+      snoozedUntil: null
+    };
+
     setAlarms(updatedAlarms);
-
-    setActiveAlarm({ ...ringingAlarm, ringing: true });
+    setActiveAlarmIndex(index);
   };
 
-  const handleSnooze = () => {
-    setShowPuzzle(true);
-    setSelectedTask(tasks[snoozeCount % tasks.length]);
-  };
-
-  const solveTask = (answer) => {
-    if (answer === selectedTask?.answer) {
-      setShowPuzzle(false);
-
-      if (activeAlarm?.ringtone) {
-        activeAlarm.ringtone.pause();
-        activeAlarm.ringtone.currentTime = 0;
-      }
-
-      if (isStopTask) {
-        stopAlarm();
-        setIsStopTask(false);
-      } else {
-        setSnoozeCount(snoozeCount + 1);
-        setIsSnoozing(true);
-
-        setTimeout(() => {
-          setIsSnoozing(false);
-          if (activeAlarm) {
-            activeAlarm.ringtone.play().catch((err) => console.log("Autoplay blocked:", err));
-          }
-        }, 5000);
-      }
-    }
-  };
-
-  const handleStopAlarm = () => {
-    setShowPuzzle(true);
-    setIsSnoozing(false);
-    setIsStopTask(true);
-    setSelectedTask(tasks[Math.floor(Math.random() * tasks.length)]);
-  };
-
-  const stopAlarm = () => {
-    if (activeAlarm?.ringtone) {
-      activeAlarm.ringtone.pause();
-      activeAlarm.ringtone.currentTime = 0;
-    }
-    setActiveAlarm(null);
-    setWakeUpSuccess(wakeUpSuccess + 1);
-  };
-
-  // **New: Stop specific alarm in the list**
   const stopSpecificAlarm = (index) => {
-    const alarmToStop = alarms[index];
+    const updatedAlarms = [...alarms];
+    const alarmToStop = updatedAlarms[index];
     if (alarmToStop?.ringtone) {
       alarmToStop.ringtone.pause();
       alarmToStop.ringtone.currentTime = 0;
     }
-    const updatedAlarms = alarms.filter((_, i) => i !== index);
+    // Remove alarm permanently when manually stopped
+    updatedAlarms.splice(index, 1);
     setAlarms(updatedAlarms);
+
+    // If the stopped alarm was active, reset active index
+    if (index === activeAlarmIndex) {
+      setActiveAlarmIndex(null);
+    }
+  };
+
+  const handleSnooze = () => {
+    setGameMode("snooze");
+    setShowGamePanel(true);
+  };
+
+  const handleStopAlarm = () => {
+    setGameMode("stop");
+    setShowGamePanel(true);
+  };
+
+  const stopAlarm = () => {
+    if (activeAlarmIndex !== null) {
+      const updatedAlarms = [...alarms];
+      const alarm = updatedAlarms[activeAlarmIndex];
+      if (alarm?.ringtone) {
+        alarm.ringtone.pause();
+        alarm.ringtone.currentTime = 0;
+      }
+      updatedAlarms[activeAlarmIndex] = {
+        ...alarm,
+        ringing: false,
+        snoozedUntil: null,
+        stopped: true // MARK as stopped to prevent retrigger
+      };
+      setAlarms(updatedAlarms);
+      setActiveAlarmIndex(null);
+      setWakeUpSuccess(wakeUpSuccess + 1);
+    }
+  };
+
+  const handleGameResult = (result) => {
+    setShowGamePanel(false);
+    if (result === "win") {
+      if (gameMode === "stop") {
+        stopAlarm();
+      } else if (gameMode === "snooze") {
+        setSnoozeCount(snoozeCount + 1);
+        if (activeAlarmIndex !== null) {
+          const updatedAlarms = [...alarms];
+          const alarm = updatedAlarms[activeAlarmIndex];
+          if (alarm?.ringtone) {
+            alarm.ringtone.pause();
+            alarm.ringtone.currentTime = 0;
+          }
+          alarm.ringing = false;
+          alarm.snoozedUntil = new Date(currentTime.getTime() + 5000); // 5 sec snooze
+          setAlarms(updatedAlarms);
+        }
+      }
+    }
   };
 
   return (
@@ -156,26 +174,27 @@ export default function SmartAlarm() {
         {alarms.map((alarm, index) => (
           <div key={index} className="alarm-item">
             <span>{alarm.time}</span>
-            <span>⏰ Alarm Set</span>
+            <span>⏰ {alarm.ringing ? "Ringing!" : "Alarm Set"}</span>
             <button onClick={() => stopSpecificAlarm(index)}>Stop</button>
           </div>
         ))}
       </div>
 
-      {activeAlarm && !showPuzzle && !isSnoozing && (
+      {activeAlarmIndex !== null && alarms[activeAlarmIndex]?.ringing && !showGamePanel && (
         <div className="alarm-active">
-          <p>ALARM RINGING! ({activeAlarm.time})</p>
+          <p>ALARM RINGING! ({alarms[activeAlarmIndex].time})</p>
           <button onClick={handleSnooze}>Snooze</button>
           <button onClick={handleStopAlarm}>Stop</button>
         </div>
       )}
 
-      {showPuzzle && selectedTask && (
-        <div className="puzzle-box">
-          <h2>Complete this task to continue</h2>
-          <p>{selectedTask.question}</p>
-          <input type="text" placeholder="Enter answer" onChange={(e) => solveTask(e.target.value)} />
-        </div>
+      {showGamePanel && (
+        <GameModal
+          mode={gameMode}
+          snoozeCount={snoozeCount}
+          onResult={handleGameResult}
+          onClose={() => setShowGamePanel(false)}
+        />
       )}
 
       <div className="stats">
