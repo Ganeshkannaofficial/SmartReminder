@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
+import { QrReader } from "react-qr-reader"; // Import QR Reader
 import "./GameModal.css";
 
 const wordList = ["JAVASCRIPT", "REACT", "ALGORITHM", "PUZZLE", "SMART", "CODING", "CHALLENGE", "BRAIN", "SNOOZE", "ALARM"];
 const colors = ["RED", "BLUE", "GREEN", "YELLOW", "PURPLE"];
 
 export default function GameModal({ mode, onResult, onClose, snoozeCount }) {
-  const [currentGame, setCurrentGame] = useState(""); // 'scrambled' or 'memory'
+  const [currentGame, setCurrentGame] = useState(""); // 'scrambled', 'memory', 'qr'
 
   // Scrambled Word Game
   const [originalWord, setOriginalWord] = useState("");
@@ -15,20 +16,27 @@ export default function GameModal({ mode, onResult, onClose, snoozeCount }) {
   // Color Memory Game
   const [colorSequence, setColorSequence] = useState([]);
   const [userColorInput, setUserColorInput] = useState("");
-  const [showSequence, setShowSequence] = useState(true); // control visibility
+  const [showSequence, setShowSequence] = useState(true);
+
+  // QR Game
+  const [qrResult, setQrResult] = useState("");
 
   useEffect(() => {
-    const randomGame = Math.random() < 0.5 ? "scrambled" : "memory";
-    setCurrentGame(randomGame);
+    const random = Math.random();
+    let selectedGame;
+    if (random < 0.33) selectedGame = "scrambled";
+    else if (random < 0.66) selectedGame = "memory";
+    else selectedGame = "qr";
+    setCurrentGame(selectedGame);
 
-    if (randomGame === "scrambled") {
+    if (selectedGame === "scrambled") {
       generateScrambledWord();
-    } else {
+    } else if (selectedGame === "memory") {
       generateColorSequence();
     }
   }, []);
 
-  // --- SCRAMBLED WORD GAME FUNCTIONS ---
+  // --- SCRAMBLED WORD GAME ---
 
   const shuffle = (word) => {
     const array = word.split("");
@@ -59,10 +67,10 @@ export default function GameModal({ mode, onResult, onClose, snoozeCount }) {
     }
   };
 
-  // --- COLOR MEMORY GAME FUNCTIONS ---
+  // --- COLOR MEMORY GAME ---
 
   const generateColorSequence = () => {
-    const length = 3 + snoozeCount; // Increase difficulty
+    const length = 3 + snoozeCount;
     let sequence = [];
     for (let i = 0; i < length; i++) {
       sequence.push(colors[Math.floor(Math.random() * colors.length)]);
@@ -71,10 +79,9 @@ export default function GameModal({ mode, onResult, onClose, snoozeCount }) {
     setUserColorInput("");
     setShowSequence(true);
 
-    // Hide after 3 seconds
     setTimeout(() => {
       setShowSequence(false);
-    }, 3000); // Change time as desired (3000ms = 3 sec)
+    }, 3000);
   };
 
   const checkColorSequence = () => {
@@ -83,6 +90,19 @@ export default function GameModal({ mode, onResult, onClose, snoozeCount }) {
     } else {
       alert(`Incorrect! Correct Sequence: ${colorSequence.join(" ")}`);
       setUserColorInput("");
+    }
+  };
+
+  // --- QR SCANNER GAME ---
+
+  const handleQrScan = (result, error) => {
+    if (!!result) {
+      setQrResult(result?.text);
+      // You can check for specific QR content here if needed
+      onResult("win");
+    }
+    if (!!error) {
+      console.log(error);
     }
   };
 
@@ -132,6 +152,23 @@ export default function GameModal({ mode, onResult, onClose, snoozeCount }) {
               <button onClick={checkColorSequence}>Submit</button>
               <button onClick={generateColorSequence}>New Sequence</button>
             </div>
+          </>
+        )}
+
+        {currentGame === "qr" && (
+          <>
+            <p className="game-instruction">Scan the QR Code to proceed:</p>
+            <div style={{ width: "250px", margin: "auto" }}>
+              <QrReader
+                constraints={{ facingMode: "environment" }}
+                onResult={handleQrScan}
+                style={{ width: "100%" }}
+              />
+            </div>
+            <p style={{ fontSize: "0.8rem", color: "#555" }}>
+              Align the QR code in the frame.
+            </p>
+            <p>Scanned: {qrResult}</p>
           </>
         )}
 
